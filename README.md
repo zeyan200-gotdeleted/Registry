@@ -1,5 +1,33 @@
 # Registry Module
 
+# Contents
+
+1. [Module Overview](#module-overview)
+   - Purpose
+   - Key Features
+   - Dependencies
+   - Usage Context
+
+2. [Module Structure](#module-structure)
+
+3. [Methods](#methods)
+   - [Registry.new()](#registrynew)
+   - [Registry:RemoteEvent(name, Callback)](#registryremoteeventname-callback)
+   - [Registry:BindableEvent(name, Callback)](#registrybindableeventname-callback)
+   - [Registry:RemoteFunction(name, Callback)](#registryremotefunctionname-callback)
+   - [Registry:BindableFunction(name, Callback)](#registrybindablefunctionname-callback)
+   - [Registry:has(name)](#registryhasname)
+   - [Registry:meta(name)](#registrymetaname)
+   - [Registry:wipe(name)](#registrywipename)
+   - [Registry:destroy()](#registrydestroy)
+
+4. [Usage Example](#usage-example)
+
+5. [Notes](#notes)
+   - Context Awareness
+   - Storage
+
+
 ---
 
 ## Module Overview
