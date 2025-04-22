@@ -245,8 +245,7 @@ registry:destroy()
 ## Notes
 
 - **Context Awareness**: The module uses `RunService:IsServer()` and `RunService:IsClient()` to ensure callbacks are correctly bound for `RemoteEvent` and `RemoteFunction` instances.
-- **Resource Management**: Always call `:destroy()` or `:wipe()` when instances are no longer needed to prevent memory leaks.
-- **Error Handling**: Input validation ensures `name` is a string and `Callback` is a function, throwing descriptive errors if invalid.
+
 - **Storage**: Networked instances (`RemoteEvent`, `RemoteFunction`) are parented to `ReplicatedStorage` for accessibility; `BindableEvent` and `BindableFunction` are stored locally.
 
 ---
