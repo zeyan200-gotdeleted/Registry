@@ -1,4 +1,4 @@
-# Registry Module Documentation
+# Registry Module
 
 ---
 
