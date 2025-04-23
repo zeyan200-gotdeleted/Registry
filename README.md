@@ -264,6 +264,8 @@ print(registry:meta("PlayerJump").type) -- RemoteEvent
 -- Remove an instance
 registry:wipe("PlayerJump")
 
+task.wait(120)
+
 -- Clean up everything
 registry:destroy()
 ```
