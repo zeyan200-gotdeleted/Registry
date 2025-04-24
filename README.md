@@ -256,7 +256,7 @@ registry:RemoteFunction("GetScore", function(player)
 end)
 
 -- Check if an instance exists
-print(registry:has("PlayerJump")) -- true
+print(registry:has("PlayerJump")) 
 
 -- Get metadata
 print(registry:meta("PlayerJump").type) -- RemoteEvent
