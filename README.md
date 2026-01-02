@@ -1,282 +1,332 @@
 # Registry Module
 
-# Contents
+## Contents
 
-1. [Module Overview](#module-overview)
-   - Purpose
-   - Key Features
-   - Dependencies
-   - Usage Context
+1. [Overview](#overview)
+2. [Design Goals](#design-goals)
+3. [Runtime Context](#runtime-context)
+4. [Internal Structure](#internal-structure)
+5. [API Reference](#api-reference)
 
-2. [Module Structure](#module-structure)
-
-3. [Methods](#methods)
-   - [Registry.new()](#registrynew)
-   - [Registry:RemoteEvent(name, Callback)](#registryremoteeventname-callback)
-   - [Registry:BindableEvent(name, Callback)](#registrybindableeventname-callback)
-   - [Registry:RemoteFunction(name, Callback)](#registryremotefunctionname-callback)
-   - [Registry:BindableFunction(name, Callback)](#registrybindablefunctionname-callback)
-   - [Registry:has(name)](#registryhasname)
-   - [Registry:meta(name)](#registrymetaname)
-   - [Registry:wipe(name)](#registrywipename)
-   - [Registry:destroy()](#registrydestroy)
-
-4. [Usage Example](#usage-example)
-
-5. [Notes](#notes)
-   - Context Awareness
-   - Storage
-
+   * [`Registry.new()`](#registrynew)
+   * [`Registry:RemoteEvent(name, callback)`](#registryremoteeventname-callback)
+   * [`Registry:RemoteFunction(name, callback)`](#registryremotefunctionname-callback)
+   * [`Registry:BindableEvent(name, callback)`](#registrybindableeventname-callback)
+   * [`Registry:BindableFunction(name, callback)`](#registrybindablefunctionname-callback)
+   * [`Registry:has(name)`](#registryhasname)
+   * [`Registry:meta(name)`](#registrymetaname)
+   * [`Registry:wipe(name)`](#registrywipename)
+   * [`Registry:destroy()`](#registrydestroy)
+6. [Usage Examples](#usage-examples)
+7. [Important Notes & Pitfalls](#important-notes--pitfalls)
 
 ---
 
-## Module Overview
+## Overview
 
-- **Purpose**: Centralizes management of Roblox event and function instances (`RemoteEvent`, `BindableEvent`, `RemoteFunction`, `BindableFunction`) with support for server and client contexts.
-- **Key Features**:
-  - Dynamic instance creation and storage.
-  - Context-aware callback attachment (e.g., `OnServerEvent`/`OnClientEvent`, `OnServerInvoke`/`OnClientInvoke`).
-  - Metadata tracking (type, creation time).
-  - Methods for querying, removing, and cleaning up instances.
-  - Input validation and memory leak prevention.
-- **Dependencies**: `ReplicatedStorage`, `RunService`
-- **Usage Context**: Server scripts, client scripts, or modules requiring networked or local event/function management.
+The **Registry Module** provides a unified, context-aware system for creating, storing, retrieving, and cleaning up Roblox communication primitives:
 
----
+* `RemoteEvent`
+* `RemoteFunction`
+* `BindableEvent`
+* `BindableFunction`
 
-## Module Structure
-
-The module returns a `Registry` table with a metatable for instance management. Each `Registry` instance maintains:
-- A `_store` table for instances (`RemoteEvent`, `BindableEvent`, `RemoteFunction`, `BindableFunction`).
-- A `_log` table for metadata (type, creation time).
-- A `_connections` table for tracking event connections and function bindings.
-- A `_parent` `Folder` in `ReplicatedStorage` to store networked instances.
+It ensures consistent naming, lifecycle management, and safe server/client behavior while reducing boilerplate and preventing duplicate instances.
 
 ---
 
-## Methods
+## Design Goals
+
+* Centralized instance management
+* Safe server/client separation
+* Automatic creation and retrieval
+* Single-callback enforcement per name
+* Predictable cleanup and destruction
+* Metadata tracking for debugging and introspection
+
+---
+
+## Runtime Context
+
+The Registry is **context-aware**:
+
+| Context | Behavior                            |
+| ------- | ----------------------------------- |
+| Server  | Creates and owns Remote instances   |
+| Client  | Waits for Remote instances to exist |
+| Both    | Can attach appropriate callbacks    |
+
+Context detection is handled via `RunService:IsServer()` and `RunService:IsClient()`.
+
+---
+
+## Internal Structure
+
+Each Registry instance maintains:
+
+* `_store` — Active instances by type
+* `_connections` — Event connections and function bindings
+* `_log` — Metadata (`type`, `creation time`)
+* `_parent` — `Folder` named **RegistryStore** in `ReplicatedStorage`
+
+### Storage Rules
+
+| Instance Type    | Location                          |
+| ---------------- | --------------------------------- |
+| RemoteEvent      | `ReplicatedStorage/RegistryStore` |
+| RemoteFunction   | `ReplicatedStorage/RegistryStore` |
+| BindableEvent    | Local (not parented)              |
+| BindableFunction | Local (not parented)              |
+
+Bindable objects are **local to the Registry instance** and are not shared across scripts.
+
+---
+
+## API Reference
+
+---
 
 ### `Registry.new()`
-Creates a new `Registry` instance.
 
-- **Returns**: `Registry` (new instance).
-- **Behavior**:
-  - Initializes `_store`, `_log`, and `_connections` tables.
-  - Creates a `Folder` named `RegistryStore` in `ReplicatedStorage` to parent networked instances.
-- **Example**:
-  ```lua
-  local Registry = require(path.to.Registry)
-  local registry = Registry.new()
-  ```
+Creates a new Registry instance.
 
----
+**Returns:** `Registry`
 
-### `Registry:RemoteEvent(name, Callback)`
-Creates or retrieves a `RemoteEvent` instance.
+**Behavior:**
 
-- **Parameters**:
-  - `name` (string): Unique name for the `RemoteEvent`.
-  - `Callback` (function, optional): Callback function to handle events.
-- **Returns**: `RemoteEvent` instance.
-- **Behavior**:
-  - Validates `name` (must be a string) and `Callback` (must be a function if provided).
-  - Creates a new `RemoteEvent` if none exists for `name`, parenting it to `_parent`.
-  - Attaches `Callback` to `OnServerEvent` (server) or `OnClientEvent` (client) based on `RunService` context.
-  - Logs metadata (`type="RemoteEvent"`, creation time).
-- **Errors**:
-  - "name must be string" if `name` is not a string.
-  - "Callback must be function" if `Callback` is provided and not a function.
-- **Example**:
-  ```lua
-  local event = registry:RemoteEvent("PlayerAction", function(player, action)
-      print(player.Name, "performed", action)
-  end)
-  ```
-
----
-
-### `Registry:BindableEvent(name, Callback)`
-Creates or retrieves a `BindableEvent` instance.
-
-- **Parameters**:
-  - `name` (string): Unique name for the `BindableEvent`.
-  - `Callback` (function, optional): Callback function to handle events.
-- **Returns**: `BindableEvent` instance.
-- **Behavior**:
-  - Validates `name` (must be a string) and `Callback` (must be a function if provided).
-  - Creates a new `BindableEvent` if none exists for `name`.
-  - Attaches `Callback` to the `Event` signal if provided.
-  - Logs metadata (`type="BindableEvent"`, creation time).
-- **Errors**:
-  - "name must be string" if `name` is not a string.
-  - "Callback must be function" if `Callback` is provided and not a function.
-- **Example**:
-  ```lua
-  local event = registry:BindableEvent("LocalSignal", function(data)
-      print("Received:", data)
-  end)
-  ```
-
----
-
-### `Registry:RemoteFunction(name, Callback)`
-Creates or retrieves a `RemoteFunction` instance.
-
-- **Parameters**:
-  - `name` (string): Unique name for the `RemoteFunction`.
-  - `Callback` (function, optional): Callback function to handle invocations.
-- **Returns**: `RemoteFunction` instance.
-- **Behavior**:
-  - Validates `name` (must be a string) and `Callback` (must be a function if provided).
-  - Creates a new `RemoteFunction` if none exists for `name`, parenting it to `_parent`.
-  - Sets `Callback` as `OnServerInvoke` (server) or `OnClientInvoke` (client) based on `RunService` context.
-  - Logs metadata (`type="RemoteFunction"`, creation time).
-- **Errors**:
-  - "name must be string" if `name` is not a string.
-  - "Callback must be function" if `Callback` is provided and not a function.
-- **Example**:
-  ```lua
-  local func = registry:RemoteFunction("GetData", function(player, key)
-      return { key = key, value = "example" }
-  end)
-  ```
-
----
-
-### `Registry:BindableFunction(name, Callback)`
-Creates or retrieves a `BindableFunction` instance.
-
-- **Parameters**:
-  - `name` (string): Unique name for the `BindableFunction`.
-  - `Callback` (function, optional): Callback function to handle invocations.
-- **Returns**: `BindableFunction` instance.
-- **Behavior**:
-  - Validates `name` (must be a string) and `Callback` (must be a function if provided).
-  - Creates a new `BindableFunction` if none exists for `name`.
-  - Sets `Callback` as `OnInvoke` if provided.
-  - Logs metadata (`type="BindableFunction"`, creation time).
-- **Errors**:
-  - "name must be string" if `name` is not a string.
-  - "Callback must be function" if `Callback` is provided and not a function.
-- **Example**:
-  ```lua
-  local func = registry:BindableFunction("Compute", function(input)
-      return input * 2
-  end)
-  ```
-
----
-
-### `Registry:has(name)`
-Checks if an instance with the given name exists.
-
-- **Parameters**:
-  - `name` (string): Name of the instance to check.
-- **Returns**: `boolean` (true if an instance exists, false otherwise).
-- **Behavior**:
-  - Checks `_store` for `RemoteEvent`, `BindableEvent`, `RemoteFunction`, or `BindableFunction` with the given `name`.
-- **Example**:
-  ```lua
-  if registry:has("PlayerAction") then
-      print("PlayerAction exists")
-  end
-  ```
-
----
-
-### `Registry:meta(name)`
-Retrieves metadata for an instance.
-
-- **Parameters**:
-  - `name` (string): Name of the instance.
-- **Returns**: `table` (metadata with `type` and `time`) or `false` if no instance exists.
-- **Behavior**:
-  - Returns the `_log` entry for `name`, containing the instance type and creation time.
-- **Example**:
-  ```lua
-  local meta = registry:meta("PlayerAction")
-  if meta then
-      print("Type:", meta.type, "Created:", meta.time)
-  end
-  ```
-
----
-
-### `Registry:wipe(name)`
-Removes a specific instance and its connections.
-
-- **Parameters**:
-  - `name` (string): Name of the instance to remove.
-- **Behavior**:
-  - Disconnects any associated connections (`RemoteEvent`, `BindableEvent`).
-  - Destroys the instance (`RemoteEvent`, `BindableEvent`, `RemoteFunction`, `BindableFunction`).
-  - Clears `_store`, `_connections`, and `_log` entries for `name`.
-- **Example**:
-  ```lua
-  registry:wipe("PlayerAction")
-  ```
-
----
-
-### `Registry:destroy()`
-Cleans up all managed resources.
-
-- **Behavior**:
-  - Disconnects all `RemoteEvent` and `BindableEvent` connections.
-  - Destroys all instances in `_store` (`RemoteEvent`, `BindableEvent`, `RemoteFunction`, `BindableFunction`).
-  - Destroys the `_parent` `Folder`.
-  - Clears `_store`, `_log`, `_connections`, and removes the metatable.
-- **Example**:
-  ```lua
-  registry:destroy()
-  ```
-
----
-
-## Usage Example
+* Initializes internal storage and connection tracking
+* Creates (server) or waits for (client) `RegistryStore` in `ReplicatedStorage`
 
 ```lua
 local Registry = require(path.to.Registry)
 local registry = Registry.new()
+```
 
--- Create a RemoteEvent (server-side)
-registry:RemoteEvent("PlayerJump", function(player)
-    print(player.Name, "jumped")
+---
+
+### `Registry:RemoteEvent(name, callback)`
+
+Creates or retrieves a `RemoteEvent`.
+
+**Parameters:**
+
+* `name` *(string, required)*
+* `callback` *(function, optional)*
+
+**Returns:** `RemoteEvent`
+
+**Behavior:**
+
+* Creates the RemoteEvent on the server if missing
+* Waits for the RemoteEvent on the client if missing
+* Attaches exactly **one** callback per name
+* Callback binds to:
+
+  * `OnServerEvent` (server)
+  * `OnClientEvent` (client)
+
+**Important:**
+
+* Only one callback may be bound per event name
+* Additional callbacks passed later are ignored
+
+```lua
+local event = registry:RemoteEvent("PlayerAction", function(player, action)
+	print(player.Name, action)
 end)
+```
 
--- Create a BindableEvent
-local event = registry:BindableEvent("GameStart", function()
-    print("Game started")
-end)
-event:Fire()
+---
 
--- Create a RemoteFunction (client-side)
+### `Registry:RemoteFunction(name, callback)`
+
+Creates or retrieves a `RemoteFunction`.
+
+**Parameters:**
+
+* `name` *(string, required)*
+* `callback` *(function, optional)*
+
+**Returns:** `RemoteFunction`
+
+**Behavior:**
+
+* Creates on server, waits on client
+* Assigns exactly one invoke handler per name
+* Callback binds to:
+
+  * `OnServerInvoke` (server)
+  * `OnClientInvoke` (client)
+
+```lua
 registry:RemoteFunction("GetScore", function(player)
-    return 100
+	return 100
+end)
+```
+
+---
+
+### `Registry:BindableEvent(name, callback)`
+
+Creates or retrieves a local `BindableEvent`.
+
+**Parameters:**
+
+* `name` *(string, required)*
+* `callback` *(function, optional)*
+
+**Returns:** `BindableEvent`
+
+**Behavior:**
+
+* Stored locally inside the Registry instance
+* Not parented or shared
+* One callback per name
+
+```lua
+local event = registry:BindableEvent("GameStart", function()
+	print("Game started")
 end)
 
--- Check if an instance exists
-print(registry:has("PlayerJump")) 
+event:Fire()
+```
 
--- Get metadata
-print(registry:meta("PlayerJump").type) -- RemoteEvent
+---
 
--- Remove an instance
-registry:wipe("PlayerJump")
+### `Registry:BindableFunction(name, callback)`
 
-task.wait(120)
+Creates or retrieves a local `BindableFunction`.
 
--- Clean up everything
+**Parameters:**
+
+* `name` *(string, required)*
+* `callback` *(function, optional)*
+
+**Returns:** `BindableFunction`
+
+```lua
+registry:BindableFunction("Compute", function(x)
+	return x * 2
+end)
+```
+
+---
+
+### `Registry:has(name)`
+
+Checks whether an instance exists.
+
+**Parameters:**
+
+* `name` *(string)*
+
+**Returns:**
+
+* The instance if found
+* `false` otherwise
+
+```lua
+local instance = registry:has("PlayerAction")
+if instance then
+	print("Exists:", instance.ClassName)
+end
+```
+
+---
+
+### `Registry:meta(name)`
+
+Returns metadata for an instance.
+
+**Returns:**
+
+* `{ type: string, time: number }`
+* `false` if not found
+
+```lua
+local meta = registry:meta("PlayerAction")
+print(meta.type, meta.time)
+```
+
+---
+
+### `Registry:wipe(name)`
+
+Removes a specific instance.
+
+**Behavior:**
+
+* Disconnects callbacks
+* Destroys the instance
+* Clears metadata
+
+```lua
+registry:wipe("PlayerAction")
+```
+
+---
+
+### `Registry:destroy()`
+
+Destroys the entire Registry.
+
+**Behavior:**
+
+* Disconnects all callbacks
+* Destroys all managed instances
+* Clears internal state
+* Destroys `RegistryStore` **only on the server**
+
+```lua
 registry:destroy()
 ```
 
 ---
 
-## Notes
+## Usage Examples
 
-- **Context Awareness**: The module uses `RunService:IsServer()` and `RunService:IsClient()` to ensure callbacks are correctly bound for `RemoteEvent` and `RemoteFunction` instances.
+### Safe RemoteEvent Pattern (Recommended)
 
-- **Storage**: Networked instances (`RemoteEvent`, `RemoteFunction`) are parented to `ReplicatedStorage` for accessibility; `BindableEvent` and `BindableFunction` are stored locally.
+```lua
+local event
+event = registry:RemoteEvent("Ping", function(player)
+	event:FireClient(player, "Pong")
+end)
+```
+
+### Client Invoke Example
+
+```lua
+local func = registry:RemoteFunction("Add")
+print(func:InvokeServer(2, 3))
+```
 
 ---
 
+## Important Notes & Pitfalls
+
+### ⚠️ Upvalue Capture Rule
+
+If a callback references the instance it belongs to, **declare first, assign second**:
+
+```lua
+local event
+event = registry:RemoteEvent("Example", function()
+	event:FireAllClients()
+end)
+```
+
+Failing to do this may result in `nil` access errors.
+
+---
+
+### ⚠️ Single Callback Per Name
+
+Each Registry name supports **one callback only**.
+Subsequent callbacks are ignored silently.
+
+---
+
+### ⚠️ Registry Instances Are Isolated
+
+Bindable objects and metadata are **not shared** between different Registry instances.
